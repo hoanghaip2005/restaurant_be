@@ -34,6 +34,11 @@ public class PaymentMethodController {
         return paymentMethodRepository.findAll();
     }
 
+    @GetMapping("/get")
+    public List<PaymentMethod> getPaymentMethods() {
+        return paymentMethodRepository.findAll();
+    }
+
     @GetMapping("/{id}")
     public PaymentMethod getPaymentMethodById(@PathVariable Long id) {
         return paymentMethodRepository.findById(id)

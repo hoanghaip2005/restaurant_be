@@ -15,6 +15,8 @@ public class CustomerDetail {
     private String imageUrl;
     private String point;
     private String voucher;
+    private Boolean newsletterSubscribed; // Đăng ký nhận newsletter
+    private String customerLevel; // REGULAR, VIP, PREMIUM
 
     @OneToOne
     @JoinColumn(name = "customer_id")
@@ -75,5 +77,21 @@ public class CustomerDetail {
 
     public void setCustomer(Customer customer) {
         this.customer = customer;
+    }
+
+    public Boolean getNewsletterSubscribed() {
+        return newsletterSubscribed;
+    }
+
+    public void setNewsletterSubscribed(Boolean newsletterSubscribed) {
+        this.newsletterSubscribed = newsletterSubscribed;
+    }
+
+    public String getCustomerLevel() {
+        return customerLevel;
+    }
+
+    public void setCustomerLevel(String customerLevel) {
+        this.customerLevel = customerLevel;
     }
 }

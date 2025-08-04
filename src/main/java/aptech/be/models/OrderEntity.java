@@ -53,6 +53,11 @@ public class OrderEntity {
     private String deliveryStatus; // e.g. null, DELIVERING, DELIVERED, CANCELLED
     private String deliveryNote;   // Ghi chú cập nhật của staff (nếu có)
 
+    // Voucher fields
+    private String appliedVoucherCode; // Mã voucher được áp dụng
+    private Double voucherDiscount; // Số tiền được giảm từ voucher
+    private Double originalAmount; // Giá trị đơn hàng trước khi áp dụng voucher
+
 
 
     public Long getId() {
@@ -157,5 +162,29 @@ public class OrderEntity {
 
     public void setNote(String note) {
         this.note = note;
+    }
+
+    public String getAppliedVoucherCode() {
+        return appliedVoucherCode;
+    }
+
+    public void setAppliedVoucherCode(String appliedVoucherCode) {
+        this.appliedVoucherCode = appliedVoucherCode;
+    }
+
+    public Double getVoucherDiscount() {
+        return voucherDiscount;
+    }
+
+    public void setVoucherDiscount(Double voucherDiscount) {
+        this.voucherDiscount = voucherDiscount;
+    }
+
+    public Double getOriginalAmount() {
+        return originalAmount;
+    }
+
+    public void setOriginalAmount(Double originalAmount) {
+        this.originalAmount = originalAmount;
     }
 }
