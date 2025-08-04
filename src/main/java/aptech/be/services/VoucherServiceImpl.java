@@ -321,8 +321,15 @@ public class VoucherServiceImpl implements VoucherService {
             System.out.println("Found voucher: " + voucher.getCode() + " - " + voucher.getName());
             System.out.println("Voucher target group: " + voucher.getTargetGroup());
             
-            if (!voucher.isValid()) {
-                throw new RuntimeException("Voucher is not valid for sending");
+            // Check if voucher is valid based on dates
+            LocalDateTime now = LocalDateTime.now();
+            if (now.isBefore(voucher.getStartDate()) || now.isAfter(voucher.getEndDate())) {
+                throw new RuntimeException("Voucher is not valid for sending: Outside valid date range");
+            }
+            
+            // Check if voucher has remaining uses
+            if (voucher.getCurrentUsage() >= voucher.getMaxUsage()) {
+                throw new RuntimeException("Voucher is not valid for sending: Maximum usage reached");
             }
             
             // Validate customers exist
@@ -340,11 +347,16 @@ public class VoucherServiceImpl implements VoucherService {
                 System.out.println("\n--- Processing customer: " + customer.getId() + " - " + customer.getEmail() + " ---");
                 
                 // Check if customer can use this voucher
-                boolean canUse = voucher.canApplyToCustomer(customer);
-                System.out.println("Customer can use voucher: " + canUse);
+                // Check if customer meets the target group requirement
+                boolean meetsTargetGroup = true;
+                if (voucher.getTargetGroup() == CustomerGroup.VIP && customer.getType() != CustomerType.VIP) {
+                    meetsTargetGroup = false;
+                } else if (voucher.getTargetGroup() == CustomerGroup.NEWSLETTER_SUBSCRIBER && !customer.isNewsletterSubscribed()) {
+                    meetsTargetGroup = false;
+                }
                 
-                if (!canUse) {
-                    System.out.println("❌ Skipping customer " + customer.getId() + " - cannot use this voucher");
+                if (!meetsTargetGroup) {
+                    System.out.println("❌ Skipping customer " + customer.getId() + " - does not meet target group requirement");
                     skippedCount++;
                     continue;
                 }
@@ -357,18 +369,41 @@ public class VoucherServiceImpl implements VoucherService {
                     continue;
                 }
                 
-                CustomerVoucher cv = new CustomerVoucher();
-                cv.setCustomer(customer);
-                cv.setVoucher(voucher);
-                cv.setStatus(CustomerVoucherStatus.SENT);
-                cv.setSentAt(LocalDateTime.now());
-                cv.setExpiredAt(voucher.getEndDate());
-                cv.setSentVia("SYSTEM");
-                
-                customerVoucherRepository.save(cv);
-                sentCount++;
-                
-                System.out.println("✅ Voucher sent to customer " + customer.getId());
+                try {
+                    CustomerVoucher cv = new CustomerVoucher();
+                    cv.setCustomer(customer);
+                    cv.setVoucher(voucher);
+                    cv.setStatus(CustomerVoucherStatus.SENT);
+                    cv.setSentAt(LocalDateTime.now());
+                    cv.setExpiredAt(voucher.getEndDate());
+                    cv.setSentVia("SYSTEM");
+                    
+                    customerVoucherRepository.save(cv);
+                    
+                    // Send email notification
+                    String subject = "Bạn có voucher mới: " + voucher.getName();
+                    String content = String.format(
+                        "Xin chào %s,\n\n" +
+                        "Bạn có voucher mới: %s\n" +
+                        "Mã voucher: %s\n" +
+                        "Giảm giá: %s\n" +
+                        "Hạn sử dụng: %s\n\n" +
+                        "Cảm ơn bạn đã sử dụng dịch vụ của chúng tôi!",
+                        customer.getFullName(),
+                        voucher.getName(),
+                        voucher.getCode(),
+                        voucher.getType() == VoucherType.PERCENTAGE ? 
+                            voucher.getDiscountValue() + "%" : voucher.getDiscountValue() + " VND",
+                        voucher.getEndDate().toString()
+                    );
+                    
+                    emailService.sendEmail(customer.getEmail(), subject, content);
+                    sentCount++;
+                    
+                    System.out.println("✅ Voucher sent to customer " + customer.getId() + " and email notification sent");
+                } catch (Exception e) {
+                    System.out.println("⚠️ Failed to send email to customer " + customer.getId() + ": " + e.getMessage());
+                }
             }
             
             System.out.println("\n=== SUMMARY ===");
@@ -476,6 +511,106 @@ public class VoucherServiceImpl implements VoucherService {
     }
 
     @Override
+    public List<VoucherStatisticsDTO> getVipVoucherStatistics() {
+        try {
+            // Lấy 1 tháng gần nhất
+            LocalDateTime endDate = LocalDateTime.now();
+            LocalDateTime startDate = endDate.minusMonths(1);
+            
+            // Lấy danh sách khách hàng VIP
+            List<Customer> vipCustomers = customerRepository.findByType(CustomerType.VIP);
+            List<Long> vipCustomerIds = vipCustomers.stream()
+                    .map(Customer::getId)
+                    .collect(Collectors.toList());
+            
+            // Lấy thống kê sử dụng voucher của nhóm VIP
+            List<Object[]> vipStats = voucherUsageRepository
+                    .getVoucherUsageStatisticsByCustomerIds(vipCustomerIds, startDate, endDate);
+            
+            // Chuyển đổi sang DTO
+            return vipStats.stream().map(row -> {
+                VoucherStatisticsDTO dto = new VoucherStatisticsDTO();
+                dto.setVoucherId((Long) row[0]);
+                dto.setTotalUsage((Long) row[1]);
+                dto.setTotalDiscount((Double) row[2]);
+                
+                // Lấy thông tin voucher
+                Voucher voucher = voucherRepository.findById(dto.getVoucherId()).orElse(null);
+                if (voucher != null) {
+                    dto.setVoucherCode(voucher.getCode());
+                    dto.setVoucherName(voucher.getName());
+                    dto.setCampaignType(voucher.getCampaignType().toString());
+                    dto.setStartDate(voucher.getStartDate());
+                    dto.setEndDate(voucher.getEndDate());
+                    dto.setStatus(voucher.getStatus().toString());
+                    dto.setMaxUsage(voucher.getMaxUsage());
+                    dto.setCurrentUsage(voucher.getCurrentUsage());
+                    dto.setUsagePercentage((double) voucher.getCurrentUsage() / voucher.getMaxUsage() * 100);
+                }
+                
+                if (dto.getTotalUsage() > 0) {
+                    dto.setAverageDiscount(dto.getTotalDiscount() / dto.getTotalUsage());
+                }
+                
+                return dto;
+            }).collect(Collectors.toList());
+            
+        } catch (Exception e) {
+            throw new RuntimeException("Error getting VIP voucher statistics: " + e.getMessage());
+        }
+    }
+    
+    @Override
+    public List<VoucherStatisticsDTO> getNewsletterVoucherStatistics() {
+        try {
+            // Lấy 1 tháng gần nhất
+            LocalDateTime endDate = LocalDateTime.now();
+            LocalDateTime startDate = endDate.minusMonths(1);
+            
+            // Lấy danh sách khách hàng đăng ký newsletter
+            List<Customer> newsletterCustomers = customerRepository.findByNewsletterSubscribed(true);
+            List<Long> newsletterCustomerIds = newsletterCustomers.stream()
+                    .map(Customer::getId)
+                    .collect(Collectors.toList());
+            
+            // Lấy thống kê sử dụng voucher của nhóm newsletter
+            List<Object[]> newsletterStats = voucherUsageRepository
+                    .getVoucherUsageStatisticsByCustomerIds(newsletterCustomerIds, startDate, endDate);
+            
+            // Chuyển đổi sang DTO
+            return newsletterStats.stream().map(row -> {
+                VoucherStatisticsDTO dto = new VoucherStatisticsDTO();
+                dto.setVoucherId((Long) row[0]);
+                dto.setTotalUsage((Long) row[1]);
+                dto.setTotalDiscount((Double) row[2]);
+                
+                // Lấy thông tin voucher
+                Voucher voucher = voucherRepository.findById(dto.getVoucherId()).orElse(null);
+                if (voucher != null) {
+                    dto.setVoucherCode(voucher.getCode());
+                    dto.setVoucherName(voucher.getName());
+                    dto.setCampaignType(voucher.getCampaignType().toString());
+                    dto.setStartDate(voucher.getStartDate());
+                    dto.setEndDate(voucher.getEndDate());
+                    dto.setStatus(voucher.getStatus().toString());
+                    dto.setMaxUsage(voucher.getMaxUsage());
+                    dto.setCurrentUsage(voucher.getCurrentUsage());
+                    dto.setUsagePercentage((double) voucher.getCurrentUsage() / voucher.getMaxUsage() * 100);
+                }
+                
+                if (dto.getTotalUsage() > 0) {
+                    dto.setAverageDiscount(dto.getTotalDiscount() / dto.getTotalUsage());
+                }
+                
+                return dto;
+            }).collect(Collectors.toList());
+            
+        } catch (Exception e) {
+            throw new RuntimeException("Error getting newsletter voucher statistics: " + e.getMessage());
+        }
+    }
+
+    @Override
     public VoucherStatisticsDTO getVoucherStatisticsById(Long voucherId, LocalDateTime startDate, LocalDateTime endDate) {
         try {
             // Validate voucher exists
@@ -553,6 +688,52 @@ public class VoucherServiceImpl implements VoucherService {
         return voucherRepository.searchVouchers(keyword).stream()
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public void sendVipVouchers() {
+        try {
+            // Tìm tất cả voucher thuộc campaign VIP
+            List<Voucher> vipVouchers = voucherRepository.findByCampaignType(CampaignType.VIP);
+            
+            // Tìm tất cả khách hàng VIP
+            List<Customer> vipCustomers = customerRepository.findByType(CustomerType.VIP);
+            
+            for (Voucher voucher : vipVouchers) {
+                if (voucher.isValid()) {
+                    List<Long> vipCustomerIds = vipCustomers.stream()
+                            .map(Customer::getId)
+                            .collect(Collectors.toList());
+                    
+                    sendVouchersToCustomers(voucher.getId(), vipCustomerIds);
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Error sending VIP vouchers: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void sendNewsletterVouchers() {
+        try {
+            // Tìm tất cả voucher thuộc campaign Newsletter
+            List<Voucher> newsletterVouchers = voucherRepository.findByCampaignType(CampaignType.NEWSLETTER);
+            
+            // Tìm tất cả khách hàng đã đăng ký nhận newsletter
+            List<Customer> newsletterCustomers = customerRepository.findByNewsletterSubscribed(true);
+            
+            for (Voucher voucher : newsletterVouchers) {
+                if (voucher.isValid()) {
+                    List<Long> newsletterCustomerIds = newsletterCustomers.stream()
+                            .map(Customer::getId)
+                            .collect(Collectors.toList());
+                    
+                    sendVouchersToCustomers(voucher.getId(), newsletterCustomerIds);
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Error sending newsletter vouchers: " + e.getMessage());
+        }
     }
 
     // Helper Methods

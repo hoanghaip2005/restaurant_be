@@ -27,6 +27,11 @@ public interface VoucherUsageRepository extends JpaRepository<VoucherUsage, Long
     @Query("SELECT COUNT(vu) FROM VoucherUsage vu WHERE vu.voucher.id = :voucherId")
     Long countUsageByVoucher(@Param("voucherId") Long voucherId);
     
+    @Query("SELECT vu FROM VoucherUsage vu WHERE vu.customer.id IN :customerIds AND vu.usedAt BETWEEN :startDate AND :endDate")
+    List<VoucherUsage> findByCustomerIdsAndDateRange(@Param("customerIds") List<Long> customerIds,
+                                                    @Param("startDate") LocalDateTime startDate,
+                                                    @Param("endDate") LocalDateTime endDate);
+    
     @Query("SELECT SUM(vu.discountAmount) FROM VoucherUsage vu WHERE vu.voucher.id = :voucherId")
     Double getTotalDiscountByVoucher(@Param("voucherId") Long voucherId);
     
@@ -39,4 +44,13 @@ public interface VoucherUsageRepository extends JpaRepository<VoucherUsage, Long
            "GROUP BY vu.voucher.id " +
            "ORDER BY usageCount DESC")
     List<Object[]> getVoucherUsageStatistics(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+    
+    @Query("SELECT vu.voucher.id, COUNT(vu) as usageCount, SUM(vu.discountAmount) as totalDiscount " +
+           "FROM VoucherUsage vu " +
+           "WHERE vu.customer.id IN :customerIds AND vu.usedAt BETWEEN :startDate AND :endDate " +
+           "GROUP BY vu.voucher.id " +
+           "ORDER BY usageCount DESC")
+    List<Object[]> getVoucherUsageStatisticsByCustomerIds(@Param("customerIds") List<Long> customerIds,
+                                                         @Param("startDate") LocalDateTime startDate, 
+                                                         @Param("endDate") LocalDateTime endDate);
 } 

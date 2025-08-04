@@ -45,6 +45,8 @@ public class VoucherController {
         return ResponseEntity.ok(vouchers);
     }
 
+    // Voucher Application
+
     // Voucher Application - Đặt trước /{id} để tránh xung đột
     @PostMapping("/apply")
     public ResponseEntity<VoucherApplyResponse> applyVoucher(@RequestBody VoucherApplyRequest request) {
@@ -233,6 +235,26 @@ public class VoucherController {
         }
     }
 
+    @PostMapping("/campaign/send-vip")
+    public ResponseEntity<String> sendVipVouchers() {
+        try {
+            voucherService.sendVipVouchers();
+            return ResponseEntity.ok("VIP vouchers sent successfully");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Failed to send VIP vouchers: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/campaign/send-newsletter")
+    public ResponseEntity<String> sendNewsletterVouchers() {
+        try {
+            voucherService.sendNewsletterVouchers();
+            return ResponseEntity.ok("Newsletter vouchers sent successfully");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Failed to send newsletter vouchers: " + e.getMessage());
+        }
+    }
+
     // Statistics
     @GetMapping("/statistics")
     public ResponseEntity<List<VoucherStatisticsDTO>> getVoucherStatistics(
@@ -268,6 +290,26 @@ public class VoucherController {
             }
             
             List<CampaignStatisticsDTO> statistics = voucherService.getCampaignStatistics(startDate, endDate);
+            return ResponseEntity.ok(statistics);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(null);
+        }
+    }
+
+    @GetMapping("/statistics/vip")
+    public ResponseEntity<List<VoucherStatisticsDTO>> getVipVoucherStatistics() {
+        try {
+            List<VoucherStatisticsDTO> statistics = voucherService.getVipVoucherStatistics();
+            return ResponseEntity.ok(statistics);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(null);
+        }
+    }
+
+    @GetMapping("/statistics/newsletter")
+    public ResponseEntity<List<VoucherStatisticsDTO>> getNewsletterVoucherStatistics() {
+        try {
+            List<VoucherStatisticsDTO> statistics = voucherService.getNewsletterVoucherStatistics();
             return ResponseEntity.ok(statistics);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(null);

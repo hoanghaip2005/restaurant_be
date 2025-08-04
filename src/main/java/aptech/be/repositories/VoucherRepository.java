@@ -44,13 +44,24 @@ public interface VoucherRepository extends JpaRepository<Voucher, Long> {
     
     @Query("SELECT v FROM Voucher v WHERE v.name LIKE %:keyword% OR v.description LIKE %:keyword%")
     List<Voucher> searchVouchers(@Param("keyword") String keyword);
-    
-    @Query("SELECT v.campaignType, v.campaignName, COUNT(v), " +
-           "(SELECT COUNT(cv) FROM CustomerVoucher cv WHERE cv.voucher.campaignType = v.campaignType AND cv.status = 'SENT'), " +
-           "(SELECT COUNT(cv) FROM CustomerVoucher cv WHERE cv.voucher.campaignType = v.campaignType AND cv.status = 'USED'), " +
-           "(SELECT COALESCE(SUM(vu.discountAmount), 0) FROM VoucherUsage vu WHERE vu.voucher.campaignType = v.campaignType) " +
-           "FROM Voucher v " +
-           "WHERE v.createdAt BETWEEN :startDate AND :endDate " +
-           "GROUP BY v.campaignType, v.campaignName")
+
+    @Query(value = "SELECT v.id, COUNT(vu), COALESCE(SUM(vu.discount_amount), 0) " +
+           "FROM vouchers v LEFT JOIN voucher_usages vu ON v.id = vu.voucher_id " +
+           "WHERE (v.start_date BETWEEN :startDate AND :endDate) OR (v.end_date BETWEEN :startDate AND :endDate) " +
+           "GROUP BY v.id", nativeQuery = true)
+    List<Object[]> getVoucherUsageStatistics(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+
+    @Query(value = "SELECT " +
+           "    v.campaign_type, " +
+           "    v.campaign_name, " +
+           "    COUNT(DISTINCT v.id) as total_vouchers, " +
+           "    COALESCE(SUM(CASE WHEN cv.status = 'SENT' THEN 1 ELSE 0 END), 0) as total_sent, " +
+           "    COALESCE(SUM(CASE WHEN cv.status = 'USED' THEN 1 ELSE 0 END), 0) as total_used, " +
+           "    COALESCE(SUM(vu.discount_amount), 0) as total_discount " +
+           "FROM vouchers v " +
+           "LEFT JOIN customer_vouchers cv ON v.id = cv.voucher_id " +
+           "LEFT JOIN voucher_usages vu ON v.id = vu.voucher_id " +
+           "WHERE (v.start_date BETWEEN :startDate AND :endDate) OR (v.end_date BETWEEN :startDate AND :endDate) " +
+           "GROUP BY v.campaign_type, v.campaign_name", nativeQuery = true)
     List<Object[]> getCampaignStatistics(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
 } 

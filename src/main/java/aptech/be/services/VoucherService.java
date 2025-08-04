@@ -29,11 +29,15 @@ public interface VoucherService {
     void sendVouchersToCustomers(Long voucherId, List<Long> customerIds);
     void sendBirthdayVouchers();
     void sendBlackFridayVouchers();
+    void sendVipVouchers();
+    void sendNewsletterVouchers();
     
     // Statistics
     List<VoucherStatisticsDTO> getVoucherStatistics(LocalDateTime startDate, LocalDateTime endDate);
     List<CampaignStatisticsDTO> getCampaignStatistics(LocalDateTime startDate, LocalDateTime endDate);
     VoucherStatisticsDTO getVoucherStatisticsById(Long voucherId, LocalDateTime startDate, LocalDateTime endDate);
+    List<VoucherStatisticsDTO> getVipVoucherStatistics();
+    List<VoucherStatisticsDTO> getNewsletterVoucherStatistics();
     
     // Utility Methods
     boolean isValidVoucher(String voucherCode);
